@@ -567,7 +567,7 @@ if run_button:
     
     st.success("✅ Simulation Complete!")
     
-    tab1, tab2, tab3 = st.tabs(["📊 Summary", "📈 Visualizations", "📄 Report"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Summary", "📈 Visualizations", "⚖️ Model Comparison", "📄 Report"])
     
     with tab1:
         st.header("Summary Statistics")
@@ -768,6 +768,284 @@ if run_button:
             st.pyplot(fig4)
     
     with tab3:
+        st.header("⚖️ Tax Model Comparison")
+        
+        if tax_model == TaxModel.NONE:
+            st.info("Tax model comparison is only available when a tax model is selected. Please select 'Realization-Based' or 'Mark-to-Market' and run the simulation.")
+        else:
+            st.subheader("Compare Both Tax Models Side-by-Side")
+            st.write("This comparison runs **both** tax models with identical parameters to show the impact of each approach.")
+            
+            # Determine which model to compare with
+            comparison_model = TaxModel.MARK_TO_MARKET if tax_model == TaxModel.REALIZATION else TaxModel.REALIZATION
+            
+            with st.spinner(f'Running comparison with {comparison_model.value.replace("_", " ").title()} model...'):
+                # Run the comparison model
+                comparison_simulator = PortfolioMonteCarloSimulator(
+                    index_params=index_params,
+                    initial_investment=initial_investment,
+                    regular_contribution=regular_contribution,
+                    contribution_frequency=contribution_frequency,
+                    years=investment_years,
+                    num_simulations=num_simulations,
+                    tax_model=comparison_model,
+                    tax_settings=tax_settings,
+                    random_seed=random_seed
+                )
+                
+                comparison_simulator.run_simulation()
+                comparison_stats = comparison_simulator.get_statistics()
+            
+            st.success("✅ Comparison Complete!")
+            
+            # Create comparison tables
+            st.subheader("Final Portfolio Values (After-Tax)")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            # Get the model names
+            model1_name = tax_model.value.replace("_", " ").title()
+            model2_name = comparison_model.value.replace("_", " ").title()
+            
+            with col1:
+                st.metric(
+                    "Scenario",
+                    "10th Percentile"
+                )
+                st.metric(
+                    model1_name,
+                    f"${stats['percentile_10']:,.0f}"
+                )
+                st.metric(
+                    model2_name,
+                    f"${comparison_stats['percentile_10']:,.0f}",
+                    delta=f"${comparison_stats['percentile_10'] - stats['percentile_10']:,.0f}"
+                )
+            
+            with col2:
+                st.metric(
+                    "Scenario",
+                    "Median (50th)"
+                )
+                st.metric(
+                    model1_name,
+                    f"${stats['median_final_value']:,.0f}"
+                )
+                st.metric(
+                    model2_name,
+                    f"${comparison_stats['median_final_value']:,.0f}",
+                    delta=f"${comparison_stats['median_final_value'] - stats['median_final_value']:,.0f}"
+                )
+            
+            with col3:
+                st.metric(
+                    "Scenario",
+                    "90th Percentile"
+                )
+                st.metric(
+                    model1_name,
+                    f"${stats['percentile_90']:,.0f}"
+                )
+                st.metric(
+                    model2_name,
+                    f"${comparison_stats['percentile_90']:,.0f}",
+                    delta=f"${comparison_stats['percentile_90'] - stats['percentile_90']:,.0f}"
+                )
+            
+            st.markdown("---")
+            st.subheader("Total Taxes Paid")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric(
+                    "Scenario",
+                    "10th Percentile"
+                )
+                st.metric(
+                    model1_name,
+                    f"${stats['total_taxes_10th']:,.0f}"
+                )
+                st.metric(
+                    model2_name,
+                    f"${comparison_stats['total_taxes_10th']:,.0f}",
+                    delta=f"${comparison_stats['total_taxes_10th'] - stats['total_taxes_10th']:,.0f}",
+                    delta_color="inverse"
+                )
+            
+            with col2:
+                st.metric(
+                    "Scenario",
+                    "Median (50th)"
+                )
+                st.metric(
+                    model1_name,
+                    f"${stats['median_total_taxes']:,.0f}"
+                )
+                st.metric(
+                    model2_name,
+                    f"${comparison_stats['median_total_taxes']:,.0f}",
+                    delta=f"${comparison_stats['median_total_taxes'] - stats['median_total_taxes']:,.0f}",
+                    delta_color="inverse"
+                )
+            
+            with col3:
+                st.metric(
+                    "Scenario",
+                    "90th Percentile"
+                )
+                st.metric(
+                    model1_name,
+                    f"${stats['total_taxes_90th']:,.0f}"
+                )
+                st.metric(
+                    model2_name,
+                    f"${comparison_stats['total_taxes_90th']:,.0f}",
+                    delta=f"${comparison_stats['total_taxes_90th'] - stats['total_taxes_90th']:,.0f}",
+                    delta_color="inverse"
+                )
+            
+            st.markdown("---")
+            st.subheader("Visual Comparison")
+            
+            # Create comparison bar chart
+            fig_comp, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+            
+            scenarios = ['10th\nPercentile', 'Median', '90th\nPercentile']
+            x = np.arange(len(scenarios))
+            width = 0.35
+            
+            # Chart 1: Final Portfolio Values
+            model1_values = [
+                stats['percentile_10'],
+                stats['median_final_value'],
+                stats['percentile_90']
+            ]
+            model2_values = [
+                comparison_stats['percentile_10'],
+                comparison_stats['median_final_value'],
+                comparison_stats['percentile_90']
+            ]
+            
+            bars1 = ax1.bar(x - width/2, model1_values, width, label=model1_name,
+                           color='#2E86AB', edgecolor='black', linewidth=1)
+            bars2 = ax1.bar(x + width/2, model2_values, width, label=model2_name,
+                           color='#06A77D', edgecolor='black', linewidth=1)
+            
+            ax1.set_ylabel('Final Portfolio Value ($)', fontsize=12)
+            ax1.set_title('After-Tax Portfolio Values', fontsize=13, fontweight='bold')
+            ax1.set_xticks(x)
+            ax1.set_xticklabels(scenarios)
+            ax1.legend()
+            ax1.grid(True, alpha=0.3, axis='y')
+            ax1.yaxis.set_major_formatter(plt.FuncFormatter(
+                lambda x, p: f'${x/1e6:.1f}M' if x >= 1e6 else f'${x/1e3:.0f}K'
+            ))
+            
+            # Chart 2: Total Taxes Paid
+            model1_taxes = [
+                stats['total_taxes_10th'],
+                stats['median_total_taxes'],
+                stats['total_taxes_90th']
+            ]
+            model2_taxes = [
+                comparison_stats['total_taxes_10th'],
+                comparison_stats['median_total_taxes'],
+                comparison_stats['total_taxes_90th']
+            ]
+            
+            bars1 = ax2.bar(x - width/2, model1_taxes, width, label=model1_name,
+                           color='#DC2F02', edgecolor='black', linewidth=1)
+            bars2 = ax2.bar(x + width/2, model2_taxes, width, label=model2_name,
+                           color='#FF8C42', edgecolor='black', linewidth=1)
+            
+            ax2.set_ylabel('Total Taxes Paid ($)', fontsize=12)
+            ax2.set_title('Total Tax Burden', fontsize=13, fontweight='bold')
+            ax2.set_xticks(x)
+            ax2.set_xticklabels(scenarios)
+            ax2.legend()
+            ax2.grid(True, alpha=0.3, axis='y')
+            ax2.yaxis.set_major_formatter(plt.FuncFormatter(
+                lambda x, p: f'${x/1e6:.1f}M' if x >= 1e6 else f'${x/1e3:.0f}K'
+            ))
+            
+            st.pyplot(fig_comp)
+            
+            # Key insights
+            st.markdown("---")
+            st.subheader("💡 Key Insights (Median Scenario)")
+            
+            median_diff_portfolio = comparison_stats['median_final_value'] - stats['median_final_value']
+            median_diff_taxes = comparison_stats['median_total_taxes'] - stats['median_total_taxes']
+            
+            insight_col1, insight_col2 = st.columns(2)
+            
+            with insight_col1:
+                if median_diff_portfolio > 0:
+                    st.success(f"""
+                    **{model2_name}** results in **${abs(median_diff_portfolio):,.0f} MORE** 
+                    in your pocket compared to {model1_name}.
+                    """)
+                else:
+                    st.success(f"""
+                    **{model1_name}** results in **${abs(median_diff_portfolio):,.0f} MORE** 
+                    in your pocket compared to {model2_name}.
+                    """)
+            
+            with insight_col2:
+                if median_diff_taxes > 0:
+                    st.error(f"""
+                    **{model2_name}** costs **${abs(median_diff_taxes):,.0f} MORE** 
+                    in taxes compared to {model1_name}.
+                    """)
+                else:
+                    st.info(f"""
+                    **{model1_name}** costs **${abs(median_diff_taxes):,.0f} MORE** 
+                    in taxes compared to {model2_name}.
+                    """)
+            
+            # Summary table
+            st.markdown("---")
+            st.subheader("Summary Comparison Table")
+            
+            comparison_table = {
+                "Metric": [
+                    "Final Value - 10th Percentile",
+                    "Final Value - Median",
+                    "Final Value - 90th Percentile",
+                    "Taxes Paid - 10th Percentile",
+                    "Taxes Paid - Median",
+                    "Taxes Paid - 90th Percentile"
+                ],
+                model1_name: [
+                    f"${stats['percentile_10']:,.0f}",
+                    f"${stats['median_final_value']:,.0f}",
+                    f"${stats['percentile_90']:,.0f}",
+                    f"${stats['total_taxes_10th']:,.0f}",
+                    f"${stats['median_total_taxes']:,.0f}",
+                    f"${stats['total_taxes_90th']:,.0f}"
+                ],
+                model2_name: [
+                    f"${comparison_stats['percentile_10']:,.0f}",
+                    f"${comparison_stats['median_final_value']:,.0f}",
+                    f"${comparison_stats['percentile_90']:,.0f}",
+                    f"${comparison_stats['total_taxes_10th']:,.0f}",
+                    f"${comparison_stats['median_total_taxes']:,.0f}",
+                    f"${comparison_stats['total_taxes_90th']:,.0f}"
+                ],
+                "Difference": [
+                    f"${comparison_stats['percentile_10'] - stats['percentile_10']:,.0f}",
+                    f"${comparison_stats['median_final_value'] - stats['median_final_value']:,.0f}",
+                    f"${comparison_stats['percentile_90'] - stats['percentile_90']:,.0f}",
+                    f"${comparison_stats['total_taxes_10th'] - stats['total_taxes_10th']:,.0f}",
+                    f"${comparison_stats['median_total_taxes'] - stats['median_total_taxes']:,.0f}",
+                    f"${comparison_stats['total_taxes_90th'] - stats['total_taxes_90th']:,.0f}"
+                ]
+            }
+            
+            st.table(comparison_table)
+    
+    with tab4:
         st.header("Detailed Report")
         
         st.subheader("Configuration")
